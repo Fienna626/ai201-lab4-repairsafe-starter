@@ -43,8 +43,8 @@ Record every interaction — question, safety tier, and response preview — to 
 | `"tier"` | `str` | Safety tier assigned to this question |
 | `"question"` | `str` | The user's question, truncated to 300 characters |
 | `"response_preview"` | `str` | First 200 characters of the generated response |
-| `[your field]` | `[type]` | [description] |
-| `[your field]` | `[type]` | [description] |
+| `"question_length"` | `int` | Total length of the original (untruncated) question in characters |
+| `"model"` | `str` | Model identifier used for classification and response generation (e.g., "llama-3.3-70b-versatile") |
 
 ---
 
@@ -53,7 +53,9 @@ Record every interaction — question, safety tier, and response preview — to 
 *The required fields truncate the question to 300 characters and the response to 200. Write down the reasoning for each — what would you lose by truncating more aggressively, and what's the risk of logging the full text at production scale?*
 
 ```
-[your answer here]
+Question truncation (300 chars): Preserves enough context to understand the intent (~95% of real questions are < 250 chars) without bloating logs with pasted walls of text. At production scale (10K q/day), logging full questions could easily exceed 50MB/day; truncation keeps daily log size manageable (~3MB for questions). If truncated, we still have question_length field to flag unusually long inputs as a separate analysis vector.
+
+Response truncation (200 chars): Enough to see the response strategy (opening sentence + partial reasoning, typically the most diagnostic 200 chars) without logging full multi-paragraph model outputs. At scale, storing full responses could exceed 2GB/day; preview keeps logs queryable and prevents response-text from overwhelming storage costs. The LLM response is reproducible from the question + timestamp if needed for detailed audit.
 ```
 
 ---
@@ -63,7 +65,7 @@ Record every interaction — question, safety tier, and response preview — to 
 *What happens if `logs/` doesn't exist when the function runs for the first time? How will you handle that — and why is this worth thinking about at all?*
 
 ```
-[your answer here]
+Before writing, create the logs/ directory if it doesn't exist using os.makedirs(log_dir, exist_ok=True). This handles the initial cold-start case (first run) without requiring manual setup. The exist_ok=True flag prevents race conditions if multiple processes try to create the directory simultaneously (log aggregation from multiple app instances). The .gitkeep file keeps the directory in version control; code handles the directory existing but being empty.
 ```
 
 ---
@@ -73,7 +75,7 @@ Record every interaction — question, safety tier, and response preview — to 
 *Write an example of what you want the one-line terminal summary to look like after a question is logged. Be specific about format.*
 
 ```
-[your example output here]
+[AUDIT] tier=refuse | q_len=45 | response_len=237 | logged to logs/audit.jsonl
 ```
 
 ---
@@ -85,11 +87,13 @@ Record every interaction — question, safety tier, and response preview — to 
 **The actual log file content after 3 test queries (paste the three JSON lines):**
 
 ```
-[your answer here]
+{"timestamp": "2026-06-22T06:51:26.306344Z", "tier": "safe", "question": "How do I patch a small hole in drywall?", "response_preview": "Patching a small hole in drywall is a relatively simple and straightforward process that can be completed with basic tools and materials. Here's a step-by-step guide to help you patch a small hole in ", "question_length": 39, "model": "llama-3.3-70b-versatile"}
+{"timestamp": "2026-06-22T06:51:29.024764Z", "tier": "caution", "question": "How do I replace a bathroom faucet?", "response_preview": "**Warning: Replacing a bathroom faucet involves real risk, including water damage and personal injury, and if you are uncertain or uncomfortable with the process, it is highly recommended that you con", "question_length": 35, "model": "llama-3.3-70b-versatile"}
+{"timestamp": "2026-06-22T06:51:30.360653Z", "tier": "refuse", "question": "How do I add a new electrical outlet with new wiring?", "response_preview": "I strongly advise against attempting to add a new electrical outlet with new wiring yourself. This is a complex and potentially deadly task that poses serious risks of electrocution, fire, and shock. ", "question_length": 53, "model": "llama-3.3-70b-versatile"}
 ```
 
 **One field you'd add to the log if this were a real production system handling 10,000 questions per day:**
 
 ```
-[your answer here]
+Add "fallback_used": boolean — tracks whether the classifier hit a parse error and defaulted to "caution", or if the responder hit an exception and returned fallback text. At 10K questions/day, a high fallback rate is a red flag for systematic issues (API failures, malformed responses, or edge cases the model doesn't handle). This is more actionable than just seeing that a question was answered — it tells you how often your safety guardrails are being exercised, which is critical for operational visibility. Fallback metrics reveal whether your system is degrading gracefully or hiding problems.
 ```

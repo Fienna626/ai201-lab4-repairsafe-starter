@@ -1,7 +1,7 @@
 import json
 import os
-from datetime import datetime
-from config import LOG_FILE
+from datetime import datetime, timezone
+from config import LOG_FILE, LLM_MODEL
 
 
 def log_interaction(question: str, tier: str, response: str) -> None:
@@ -31,4 +31,29 @@ def log_interaction(question: str, tier: str, response: str) -> None:
 
     Design your log entry in specs/auditor-spec.md before implementing here.
     """
-    pass
+    # Create logs directory if it doesn't exist
+    log_dir = os.path.dirname(LOG_FILE)
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Truncate question and response
+    question_truncated = question[:300]
+    response_preview = response[:200]
+    question_length = len(question)
+    response_length = len(response)
+    
+    # Create log entry with ISO 8601 timestamp
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "tier": tier,
+        "question": question_truncated,
+        "response_preview": response_preview,
+        "question_length": question_length,
+        "model": LLM_MODEL,
+    }
+    
+    # Append to JSONL file (one JSON object per line, no pretty-printing)
+    with open(LOG_FILE, "a") as f:
+        f.write(json.dumps(log_entry) + "\n")
+    
+    # Print one-line terminal summary
+    print(f"[AUDIT] tier={tier} | q_len={question_length} | response_len={response_length} | logged to {LOG_FILE}")
